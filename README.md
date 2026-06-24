@@ -1,0 +1,3 @@
+# Seshat
+
+> A discord bot to manage user's progress in online courses, like OSSU, the Odin Project, etc...
