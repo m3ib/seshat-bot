@@ -1,20 +1,23 @@
 import pytest
 
 from src import db as db
+from src.config import Config
+
+TEST_CONFIG = Config(db=":memory:")
 
 
 def test_new_group():
-    con = db.init_db(testing=True)
-    db.create_group("Math", 0, connection=con)
+    con = db.init_db(config=TEST_CONFIG)
+    db.create_group("Math", connection=con)
 
     result = con.execute("SELECT * FROM courseGroup WHERE name = 'Math'").fetchone()
     assert result
 
 
 def test_new_course():
-    con = db.init_db(testing=True)
+    con = db.init_db(config=TEST_CONFIG)
 
-    group_id = db.create_group("Math", 0, connection=con)
+    group_id = db.create_group("Math", connection=con)
     db.create_course(group_id, "Algebra 1", connection=con)
 
     result = con.execute(
@@ -25,9 +28,9 @@ def test_new_course():
 
 
 def test_new_module():
-    con = db.init_db(testing=True)
+    con = db.init_db(config=TEST_CONFIG)
 
-    group_id = db.create_group("Math", 0, connection=con)
+    group_id = db.create_group("Math", connection=con)
     course_id = db.create_course(group_id, "Algebra 1", connection=con)
     db.create_module(course_id, "Lesson 1", connection=con)
 
@@ -39,9 +42,9 @@ def test_new_module():
 
 
 def test_new_entry():
-    con = db.init_db(testing=True)
+    con = db.init_db(config=TEST_CONFIG)
 
-    group_id = db.create_group("Math", 0, connection=con)
+    group_id = db.create_group("Math", connection=con)
     course_id = db.create_course(group_id, "Algebra 1", connection=con)
     module_id = db.create_module(course_id, "Lesson 1", connection=con)
     db.create_entry(1, module_id, connection=con)

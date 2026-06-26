@@ -3,34 +3,32 @@
 import os
 import sqlite3
 
+from .config import Config
 from .utils import APP_DIR, ROOT_DIR
 
-_DB_DIR = os.path.join(ROOT_DIR, "instance/")
 _db_path = ""  # set by init_db
 
 
-def get_db(db_path: str = _db_path) -> sqlite3.Connection:
+def get_db(db_path: str | None = None) -> sqlite3.Connection:
     """Create a new connection object to db.
 
     Note: Run init_db once before calling this function.
     """
-    conn = sqlite3.Connection(db_path)
+    conn = sqlite3.Connection(db_path or _db_path)
     conn.row_factory = sqlite3.Row
 
     return conn
 
 
-def init_db(testing=False) -> sqlite3.Connection:
+def init_db(config: Config) -> sqlite3.Connection:
     """Execute the database schema and set the required pragmas."""
     global _db_path
 
-    if not testing and not os.path.exists(_DB_DIR):
-        os.mkdir(_DB_DIR)
-
-    if not testing:
-        _db_path = os.path.join(_DB_DIR, "bot.db")
-    else:
-        _db_path = ":memory:"
+    is_dir = "/" in config.db or "\\" in config.db
+    dirname = os.path.dirname(config.db)
+    if not os.path.exists(dirname) and is_dir:
+        os.mkdir(dirname)
+    _db_path = config.db
 
     con = get_db()
     cur = con.cursor()
@@ -45,25 +43,19 @@ def init_db(testing=False) -> sqlite3.Connection:
     return con
 
 
-def create_group(
-    name: str, guild: int | None = None, connection: sqlite3.Connection | None = None
-) -> int:
-    """Create a new group entity with given name under the specified guild.
+def create_group(name: str, connection: sqlite3.Connection | None = None) -> int:
+    """Create a new group entity with given name.
 
     Args:
         name: The name of the group.
-        guild: The guild id that owns with the group.
         connection: A connection object to use instead of creating a new one. Used for testing
 
     Returns: id of the created group.
     """
-    if not connection:
-        con = get_db()
-    else:
-        con = connection
+    con = connection or get_db()
 
     cur = con.cursor()
-    cur.execute("INSERT INTO courseGroup (name, guildId) VALUES (?, ?)", (name, guild))
+    cur.execute("INSERT INTO courseGroup (name) VALUES (?)", (name,))
     last_id = cur.lastrowid
     con.commit()
 
@@ -88,10 +80,7 @@ def create_course(
 
     Returns: id of the created course.
     """
-    if not connection:
-        con = get_db()
-    else:
-        con = connection
+    con = connection or get_db()
 
     cur = con.cursor()
     cur.execute(
@@ -121,10 +110,7 @@ def create_module(
 
     Returns: id of the created module.
     """
-    if not connection:
-        con = get_db()
-    else:
-        con = connection
+    con = connection or get_db()
 
     cur = con.cursor()
 
@@ -154,10 +140,7 @@ def create_entry(
 
     Returns: id of the created entry.
     """
-    if not connection:
-        con = get_db()
-    else:
-        con = connection
+    con = connection or get_db()
 
     cur = con.cursor()
 
@@ -169,3 +152,17 @@ def create_entry(
     con.commit()
 
     return last_id
+
+
+def get_all(
+    table: str, connection: sqlite3.Connection | None = None
+) -> list[sqlite3.Row]:
+    """Fetch all rows in the given table.
+
+    Args:
+        table: The table to query.
+        connection: A connection object to use instead of creating a new one. Used for testing
+    """
+    con = connection or get_db()
+
+    return con.execute(f"SELECT * FROM {table}").fetchall()

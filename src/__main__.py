@@ -1,20 +1,12 @@
 """The entry point to the app."""
 
-import os
-
-from dotenv import load_dotenv
-
 from .db import init_db
-from .main import MyClient, intents
-
-load_dotenv()
+from .main import CONFIG, client
 
 if __name__ == "__main__":
-    init_db()
+    init_db(CONFIG)
 
-    client = MyClient(intents=intents)
-    TOKEN = os.getenv("TOKEN")
-    if TOKEN:
-        client.run(TOKEN)
+    if CONFIG.token:
+        client.run(CONFIG.token)
     else:
         raise RuntimeError("can't run without a token.")
