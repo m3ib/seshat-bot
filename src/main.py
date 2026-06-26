@@ -5,7 +5,7 @@ import functools
 import discord
 from discord import app_commands
 
-from . import db as db
+from . import db, utils
 from .config import Config
 from .utils import error_embed, info_embed
 
@@ -136,3 +136,59 @@ async def channel_choices(
         for ch in channels
         if ch.name.lower().startswith(current.lower())
     ]
+
+
+@client.tree.command()
+@app_commands.describe(
+    module="The module to mark as done",
+    course="The course which contains the module (in case not in the default channel of the course)",
+)
+async def mark_done(
+    interaction: discord.Interaction, module: str, course: str | None = None
+):
+    con = db.get_db()
+
+    if course:
+        course_row = con.execute(
+            "SELECT id, name FROM course WHERE name = ?", (course,)
+        ).fetchone()
+
+        if not course_row:
+            await interaction.response.send_message(
+                embed=error_embed("Such a course doesn't exist."),
+                ephemeral=True,
+            )
+            return
+    else:
+        course_row = con.execute(
+            "SELECT id, name FROM course WHERE channelId = ?", (interaction.channel_id,)
+        ).fetchone()
+
+        if not course_row:
+            await interaction.response.send_message(
+                embed=error_embed(
+                    "The current channel isn't linked to any course. Please manually specify one."
+                ),
+                ephemeral=True,
+            )
+            return
+
+    module_row = con.execute(
+        "SELECT id FROM module WHERE courseId = ? AND name = ?",
+        (course_row["id"], module),
+    ).fetchone()
+
+    if not module_row:
+        await interaction.response.send_message(
+            embed=error_embed("Such a module doesn't exist."), ephemeral=True
+        )
+        return
+
+    db.create_entry(interaction.user.id, module_row["id"])
+
+    await interaction.response.send_message(
+        embed=info_embed(
+            f"**{course_row['name']}**\n{db.course_progress(interaction.user.id, course_row['id'])}"
+        ),
+        ephemeral=True,
+    )

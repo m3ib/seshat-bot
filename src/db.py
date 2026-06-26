@@ -166,3 +166,24 @@ def get_all(
     con = connection or get_db()
 
     return con.execute(f"SELECT * FROM {table}").fetchall()
+
+
+def course_progress(user_id: int, course_id: int) -> str:
+    """List all modules in a course and show which are done"""
+    con = get_db()
+    course_modules = con.execute(
+        "SELECT * FROM module WHERE courseId = ?", (course_id,)
+    ).fetchall()
+
+    output = ""
+
+    for module in course_modules:
+        is_checked = con.execute(
+            "SELECT * FROM checkEntry WHERE userId = ? AND moduleId = ?",
+            (user_id, module["id"]),
+        ).fetchone()
+
+        output += "✅" if is_checked else "◆"
+        output += f" {module['name']}\n"
+
+    return output
