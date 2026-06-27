@@ -17,7 +17,7 @@ def test_new_group():
 def test_new_course():
     con = db.init_db(config=TEST_CONFIG)
 
-    group_id = db.create_group("Math", connection=con)
+    group_id = db.create_group("Math", connection=con).rowid
     db.create_course(group_id, "Algebra 1", connection=con)
 
     result = con.execute(
@@ -30,8 +30,8 @@ def test_new_course():
 def test_new_module():
     con = db.init_db(config=TEST_CONFIG)
 
-    group_id = db.create_group("Math", connection=con)
-    course_id = db.create_course(group_id, "Algebra 1", connection=con)
+    group_id = db.create_group("Math", connection=con).rowid
+    course_id = db.create_course(group_id, "Algebra 1", connection=con).rowid
     db.create_module(course_id, "Lesson 1", connection=con)
 
     result = con.execute(
@@ -44,9 +44,9 @@ def test_new_module():
 def test_new_entry():
     con = db.init_db(config=TEST_CONFIG)
 
-    group_id = db.create_group("Math", connection=con)
-    course_id = db.create_course(group_id, "Algebra 1", connection=con)
-    module_id = db.create_module(course_id, "Lesson 1", connection=con)
+    group_id = db.create_group("Math", connection=con).rowid
+    course_id = db.create_course(group_id, "Algebra 1", connection=con).rowid
+    module_id = db.create_module(course_id, "Lesson 1", connection=con).rowid
     db.create_entry(1, module_id, connection=con)
 
     result = con.execute(

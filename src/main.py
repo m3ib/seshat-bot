@@ -5,9 +5,9 @@ import functools
 import discord
 from discord import app_commands
 
-from . import db, utils
+from . import db
 from .config import Config
-from .utils import error_embed, info_embed
+from .utils import embed_status, error_embed
 
 CONFIG = Config()
 
@@ -62,10 +62,8 @@ def admin_perms(func):
 @app_commands.describe(name="The group's name")
 @admin_perms
 async def new_group(interaction: discord.Interaction, name: str):
-    group_id = db.create_group(name=name)
-    await interaction.response.send_message(
-        embed=info_embed(f"Group: **{name}** created."), ephemeral=True
-    )
+    status = db.create_group(name=name)
+    await interaction.response.send_message(embed=embed_status(status), ephemeral=True)
 
 
 @client.tree.command()
@@ -83,33 +81,10 @@ async def new_course(
     default_channel: str | None = None,
     order: int | None = None,
 ):
-    con = db.get_db()
-
-    row = con.execute("SELECT * FROM courseGroup WHERE id = ?", (group,)).fetchone()
-
-    if not row:
-        await interaction.response.send_message(
-            embed=error_embed("Such a group doesn't exist."), ephemeral=True
-        )
-        return
-
-    channel_in_use = con.execute(
-        "SELECT * FROM course where channelId = ?", (default_channel,)
-    ).fetchone()
-    if default_channel and channel_in_use:
-        await interaction.response.send_message(
-            embed=error_embed(
-                f"Channel is already linked to course **{channel_in_use['name']}**."
-            )
-        )
-        return
-
-    course_id = db.create_course(
+    status = db.create_course(
         group, name, int(default_channel) if default_channel else None, order
     )
-    await interaction.response.send_message(
-        embed=info_embed(f"Course: **{name}** created."), ephemeral=True
-    )
+    await interaction.response.send_message(embed=embed_status(status), ephemeral=True)
 
 
 @new_course.autocomplete("group")
@@ -139,56 +114,24 @@ async def channel_choices(
 
 
 @client.tree.command()
-@app_commands.describe(
-    module="The module to mark as done",
-    course="The course which contains the module (in case not in the default channel of the course)",
-)
-async def mark_done(
-    interaction: discord.Interaction, module: str, course: str | None = None
-):
-    con = db.get_db()
+@app_commands.describe(module="The module to mark as done")
+async def mark_done(interaction: discord.Interaction, module: int):
+    status = db.create_entry(interaction.user.id, module)
+    await interaction.response.send_message(embed=embed_status(status), ephemeral=True)
 
-    if course:
-        course_row = con.execute(
-            "SELECT id, name FROM course WHERE name = ?", (course,)
-        ).fetchone()
 
-        if not course_row:
-            await interaction.response.send_message(
-                embed=error_embed("Such a course doesn't exist."),
-                ephemeral=True,
-            )
-            return
-    else:
-        course_row = con.execute(
-            "SELECT id, name FROM course WHERE channelId = ?", (interaction.channel_id,)
-        ).fetchone()
-
-        if not course_row:
-            await interaction.response.send_message(
-                embed=error_embed(
-                    "The current channel isn't linked to any course. Please manually specify one."
-                ),
-                ephemeral=True,
-            )
-            return
-
-    module_row = con.execute(
-        "SELECT id FROM module WHERE courseId = ? AND name = ?",
-        (course_row["id"], module),
-    ).fetchone()
-
-    if not module_row:
-        await interaction.response.send_message(
-            embed=error_embed("Such a module doesn't exist."), ephemeral=True
+@mark_done.autocomplete("module")
+async def module_choices(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    return [
+        app_commands.Choice(
+            name=f"{module['courseName']} — {module['name']}"  # not in a default channel
+            if "courseName" in module.keys()
+            else module["name"],  # in a default channel
+            value=str(module["id"]),
         )
-        return
-
-    db.create_entry(interaction.user.id, module_row["id"])
-
-    await interaction.response.send_message(
-        embed=info_embed(
-            f"**{course_row['name']}**\n{db.course_progress(interaction.user.id, course_row['id'])}"
-        ),
-        ephemeral=True,
-    )
+        for module in db.get_modules(interaction.user.id, interaction.channel_id)
+        if module["name"].lower().startswith(current.lower())
+        or module["courseName"].lower().startswith(current.lower())
+    ]

@@ -4,7 +4,7 @@ import os
 import sqlite3
 
 from .config import Config
-from .utils import APP_DIR, ROOT_DIR
+from .utils import Status, StatusType, path_from_app
 
 _db_path = ""  # set by init_db
 
@@ -14,10 +14,10 @@ def get_db(db_path: str | None = None) -> sqlite3.Connection:
 
     Note: Run init_db once before calling this function.
     """
-    conn = sqlite3.Connection(db_path or _db_path)
-    conn.row_factory = sqlite3.Row
+    con = sqlite3.Connection(db_path or _db_path)
+    con.row_factory = sqlite3.Row
 
-    return conn
+    return con
 
 
 def init_db(config: Config) -> sqlite3.Connection:
@@ -34,32 +34,34 @@ def init_db(config: Config) -> sqlite3.Connection:
     cur = con.cursor()
     cur.execute("PRAGMA FOREIGN_KEYS = ON")
 
-    with open(os.path.join(APP_DIR, "schema.sql"), "r") as f:
+    with open(path_from_app("schema.sql"), "r") as f:
         cur.executescript(f.read())
 
-    cur.close()
     con.commit()
 
     return con
 
 
-def create_group(name: str, connection: sqlite3.Connection | None = None) -> int:
+def create_group(name: str, connection: sqlite3.Connection | None = None) -> Status:
     """Create a new group entity with given name.
 
     Args:
         name: The name of the group.
-        connection: A connection object to use instead of creating a new one. Used for testing
+        connection: A connection object to use instead of creating a new one. Used for testing.
 
-    Returns: id of the created group.
+    Returns: A Status object.
     """
     con = connection or get_db()
 
     cur = con.cursor()
     cur.execute("INSERT INTO courseGroup (name) VALUES (?)", (name,))
     last_id = cur.lastrowid
-    con.commit()
 
-    return last_id
+    con.commit()
+    if not connection:  # if the connection was made by this function, close it
+        con.close()
+
+    return Status(msg=f"Group: **{name}** created.", rowid=last_id)
 
 
 def create_course(
@@ -68,7 +70,7 @@ def create_course(
     channel_id: int | None = None,
     order: int | None = None,
     connection: sqlite3.Connection | None = None,
-) -> int:
+) -> Status:
     """Create a new course entity under the given group.
 
     Args:
@@ -76,21 +78,46 @@ def create_course(
         name: The name of the course.
         channel_id: Channel to associate the course with.
         order: Sort key, creation date will be used otherwise.
-        connection: A connection object to use instead of creating a new one. Used for testing
+        connection: A connection object to use instead of creating a new one. Used for testing.
 
-    Returns: id of the created course.
+    Returns: A Status object.
     """
     con = connection or get_db()
 
     cur = con.cursor()
+
+    group_exists = cur.execute(
+        "SELECT name as groupName FROM courseGroup WHERE id = ?", (group_id,)
+    ).fetchone()
+    if not group_exists:
+        return Status(
+            StatusType.ERROR, msg="Such a group doesn't exist. Please create it first."
+        )
+
+    if channel_id:
+        channel_in_use = cur.execute(
+            "SELECT name as courseName FROM course WHERE channelId = ?", (channel_id,)
+        ).fetchone()
+        if channel_in_use:
+            return Status(
+                StatusType.ERROR,
+                msg=f"This channel is already in use by **{channel_in_use['courseName']}**.",
+            )
+
     cur.execute(
         "INSERT INTO course (courseGroupId, name, channelId, ord) VALUES (?, ?, ?, ?)",
         (group_id, name, channel_id, order),
     )
     last_id = cur.lastrowid
-    con.commit()
 
-    return last_id
+    con.commit()
+    if not connection:  # if the connection was made by this function, close it
+        con.close()
+
+    return Status(
+        msg=f"Created course **{name}** under {group_exists['groupName']}.",
+        rowid=last_id,
+    )
 
 
 def create_module(
@@ -98,7 +125,7 @@ def create_module(
     name: str,
     order: int | None = None,
     connection: sqlite3.Connection | None = None,
-) -> int:
+) -> Status:
     """Create a new module entity under the given course.
 
     Args:
@@ -106,52 +133,74 @@ def create_module(
         name: The name of the course.
         channel_id: Channel to associate the course with.
         order: Sort key, creation date will be used otherwise.
-        connection: A connection object to use instead of creating a new one. Used for testing
+        connection: A connection object to use instead of creating a new one. Used for testing.
 
-    Returns: id of the created module.
+    Returns: A Status object.
     """
     con = connection or get_db()
 
     cur = con.cursor()
 
-    group_id = cur.execute(
-        "SELECT courseGroupId FROM course WHERE id = ?", (course_id,)
-    ).fetchone()["courseGroupId"]
+    course_exists = cur.execute(
+        "SELECT courseGroupId as groupId, name FROM course WHERE id = ?", (course_id,)
+    ).fetchone()
+
+    if not course_exists:
+        return Status(
+            StatusType.ERROR, msg="Such a course doesn't exist. Please create it first."
+        )
 
     cur.execute(
         "INSERT INTO module (courseGroupId, courseId, name, ord) VALUES (?, ?, ?, ?)",
-        (group_id, course_id, name, order),
+        (course_exists["groupId"], course_id, name, order),
     )
     last_id = cur.lastrowid
-    con.commit()
 
-    return last_id
+    con.commit()
+    if not connection:  # if the connection was made by this function, close it
+        con.close()
+
+    return Status(
+        msg=f"Module {name} created under {course_exists['name']}", rowid=last_id
+    )
 
 
 def create_entry(
     user_id: int, module_id: int, connection: sqlite3.Connection | None = None
-) -> int:
+) -> Status:
     """Create a new check entry entity.
 
     Args:
         user_id: The id of the user.
         module_id: The id of the module to check.
-        connection: A connection object to use instead of creating a new one. Used for testing
+        connection: A connection object to use instead of creating a new one. Used for testing.
 
-    Returns: id of the created entry.
+    Returns: A Status object.
     """
     con = connection or get_db()
 
     cur = con.cursor()
+
+    module_exists = cur.execute(
+        "SELECT name FROM module WHERE id = ?", (module_id,)
+    ).fetchone()
+
+    if not module_exists:
+        return Status(
+            StatusType.ERROR, msg="Such a module doesn't exist. Please create it first."
+        )
 
     cur.execute(
         "INSERT INTO checkEntry (userId, moduleId) VALUES (?, ?)",
         (user_id, module_id),
     )
     last_id = cur.lastrowid
-    con.commit()
 
-    return last_id
+    con.commit()
+    if not connection:  # if the connection was made by this function, close it
+        con.close()
+
+    return Status(msg=f"Checked **{module_exists['name']}**. Great job!", rowid=last_id)
 
 
 def get_all(
@@ -161,11 +210,41 @@ def get_all(
 
     Args:
         table: The table to query.
-        connection: A connection object to use instead of creating a new one. Used for testing
+        connection: A connection object to use instead of creating a new one. Used for testing.
     """
     con = connection or get_db()
 
     return con.execute(f"SELECT * FROM {table}").fetchall()
+
+
+def get_modules(
+    user_id, channel_id: int | None = None, connection: sqlite3.Connection | None = None
+) -> list[sqlite3.Row]:
+    """Fetch unchecked modules from the context of the current channel if possible.
+
+    Args:
+        channel_id: Channel to derive the course from. If no course is linked to it, modules are queried from all courses instead.
+        connection: A connection object to use instead of creating a new one. Used for testing.
+    """
+    con = connection or get_db()
+    cur = con.cursor()
+    course_linked = con.execute(
+        "SELECT id FROM course WHERE channelId = ?", (channel_id,)
+    ).fetchone()
+
+    if course_linked:
+        modules = cur.execute(
+            "SELECT id, name FROM module WHERE courseId = ? AND id not in (SELECT id FROM checkEntry)",
+            (course_linked["id"],),
+        ).fetchall()
+    else:
+        modules = cur.execute(
+            "SELECT module.id as id, module.name as name, course.name as courseName FROM module JOIN course ON module.courseId = course.id"
+        ).fetchall()
+
+    con.close()
+
+    return modules
 
 
 def course_progress(user_id: int, course_id: int) -> str:
