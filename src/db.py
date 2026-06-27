@@ -24,9 +24,8 @@ def init_db(config: Config) -> sqlite3.Connection:
     """Execute the database schema and set the required pragmas."""
     global _db_path
 
-    is_dir = "/" in config.db or "\\" in config.db
     dirname = os.path.dirname(config.db)
-    if not os.path.exists(dirname) and is_dir:
+    if dirname and not os.path.exists(dirname):
         os.mkdir(dirname)
     _db_path = config.db
 
