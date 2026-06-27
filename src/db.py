@@ -189,6 +189,16 @@ def create_entry(
             StatusType.ERROR, msg="Such a module doesn't exist. Please create it first."
         )
 
+    entry_exists = cur.execute(
+        "SELECT * FROM checkEntry WHERE userId = ? AND moduleId = ?",
+        (user_id, module_id),
+    ).fetchone()
+
+    if entry_exists:
+        return Status(
+            StatusType.ERROR, msg="You have already checked this module before."
+        )
+
     cur.execute(
         "INSERT INTO checkEntry (userId, moduleId) VALUES (?, ?)",
         (user_id, module_id),
@@ -222,7 +232,7 @@ def get_modules(
     """Fetch unchecked modules from the context of the current channel if possible.
 
     Args:
-        channel_id: Channel to derive the course from. If no course is linked to it, modules are queried from all courses instead.
+        channel_id: Channel to derive the course from. If no course is linked to it, all modules (in all courses) are returned instead.
         connection: A connection object to use instead of creating a new one. Used for testing.
     """
     con = connection or get_db()

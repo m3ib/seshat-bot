@@ -29,5 +29,6 @@ CREATE TABLE IF NOT EXISTS checkEntry (
   userId INTEGER,
   moduleId INTEGER NOT NULL,
   creationDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (userId, moduleId),
   FOREIGN KEY (moduleId) REFERENCES module(id) ON DELETE CASCADE
 );

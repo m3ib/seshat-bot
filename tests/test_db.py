@@ -2,6 +2,7 @@ import pytest
 
 from src import db as db
 from src.config import Config
+from src.utils import StatusType
 
 TEST_CONFIG = Config(db=":memory:")
 
@@ -18,13 +19,30 @@ def test_new_course():
     con = db.init_db(config=TEST_CONFIG)
 
     group_id = db.create_group("Math", connection=con).rowid
-    db.create_course(group_id, "Algebra 1", connection=con)
+
+    status = db.create_course(group_id, "Algebra 1", connection=con)
 
     result = con.execute(
         "SELECT * FROM course WHERE name = 'Algebra 1' AND courseGroupId = ?",
         (group_id,),
     ).fetchone()
+    assert status.type == StatusType.INFO
     assert result
+
+
+def test_new_course_invalid():
+    con = db.init_db(config=TEST_CONFIG)
+
+    group_id = db.create_group("Math", connection=con).rowid
+
+    status = db.create_course(group_id + 1, "Algebra 1", connection=con)
+
+    result = con.execute(
+        "SELECT * FROM course WHERE name = 'Algebra 1' AND courseGroupId = ?",
+        (group_id,),
+    ).fetchone()
+    assert status.type == StatusType.ERROR
+    assert not result
 
 
 def test_new_module():
@@ -32,13 +50,31 @@ def test_new_module():
 
     group_id = db.create_group("Math", connection=con).rowid
     course_id = db.create_course(group_id, "Algebra 1", connection=con).rowid
-    db.create_module(course_id, "Lesson 1", connection=con)
+
+    status = db.create_module(course_id, "Lesson 1", connection=con)
 
     result = con.execute(
         "SELECT * FROM module WHERE name = 'Lesson 1' AND courseGroupId = ? AND courseId = ?",
         (group_id, course_id),
     ).fetchone()
+    assert status.type == StatusType.INFO
     assert result
+
+
+def test_new_module_invalid():
+    con = db.init_db(config=TEST_CONFIG)
+
+    group_id = db.create_group("Math", connection=con).rowid
+    course_id = db.create_course(group_id, "Algebra 1", connection=con).rowid
+
+    status = db.create_module(course_id + 1, "Lesson 1", connection=con)
+
+    result = con.execute(
+        "SELECT * FROM module WHERE name = 'Lesson 1' AND courseGroupId = ? AND courseId = ?",
+        (group_id, course_id),
+    ).fetchone()
+    assert status.type == StatusType.ERROR
+    assert not result
 
 
 def test_new_entry():
@@ -47,10 +83,48 @@ def test_new_entry():
     group_id = db.create_group("Math", connection=con).rowid
     course_id = db.create_course(group_id, "Algebra 1", connection=con).rowid
     module_id = db.create_module(course_id, "Lesson 1", connection=con).rowid
-    db.create_entry(1, module_id, connection=con)
+
+    status = db.create_entry(1, module_id, connection=con)
 
     result = con.execute(
         "SELECT * FROM checkEntry WHERE userId = 1 AND moduleId = ?",
         (module_id,),
     ).fetchone()
+    assert status.type == StatusType.INFO
     assert result
+
+
+def test_new_entry_invalid():
+    con = db.init_db(config=TEST_CONFIG)
+
+    group_id = db.create_group("Math", connection=con).rowid
+    course_id = db.create_course(group_id, "Algebra 1", connection=con).rowid
+    module_id = db.create_module(course_id, "Lesson 1", connection=con).rowid
+
+    status = db.create_entry(1, module_id + 1, connection=con)
+
+    result = con.execute(
+        "SELECT * FROM checkEntry WHERE userId = 1 AND moduleId = ?",
+        (module_id,),
+    ).fetchone()
+    assert status.type == StatusType.ERROR
+    assert not result
+
+
+def test_new_entry_duplicate():
+    con = db.init_db(config=TEST_CONFIG)
+
+    group_id = db.create_group("Math", connection=con).rowid
+    course_id = db.create_course(group_id, "Algebra 1", connection=con).rowid
+    module_id = db.create_module(course_id, "Lesson 1", connection=con).rowid
+
+    first_status = db.create_entry(1, module_id, connection=con)
+    second_status = db.create_entry(1, module_id, connection=con)
+
+    result = con.execute(
+        "SELECT * FROM checkEntry WHERE userId = 1 AND moduleId = ?",
+        (module_id,),
+    ).fetchall()
+    assert first_status.type == StatusType.INFO
+    assert second_status.type == StatusType.ERROR
+    assert len(result) == 1
