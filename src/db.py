@@ -268,3 +268,18 @@ def course_progress(user_id: int, course_id: int) -> str:
         output += f" {module['name']}\n"
 
     return output
+
+
+def deduce_course(channel_id: int) -> sqlite3.Row:
+    """Try to deduce the course from the context of a channel
+
+    Args:
+        channel_id: The current channel the user is in.
+    """
+    con = get_db()
+
+    course_exists = con.execute(
+        "SELECT * FROM course WHERE channelId = ?", (channel_id,)
+    ).fetchone()
+
+    return course_exists

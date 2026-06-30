@@ -20,10 +20,17 @@ class MyClient(discord.Client):
 
         self.tree = app_commands.CommandTree(self)
 
+        # command groups
+        self.admin_group = app_commands.Group(
+            name="admin", description="Admin commands"
+        )
+
     async def setup_hook(self):
         # instant registeration of commands
         if CONFIG.my_guild:
             g = discord.Object(id=CONFIG.my_guild)
+
+            self.tree.add_command(self.admin_group)
             self.tree.copy_global_to(guild=g)
             await self.tree.sync(guild=g)
 
@@ -58,7 +65,7 @@ def admin_perms(func):
     return wrapper
 
 
-@client.tree.command()
+@client.admin_group.command(description="Create a new group for courses")
 @app_commands.describe(name="The group's name")
 @admin_perms
 async def new_group(interaction: discord.Interaction, name: str):
@@ -66,7 +73,7 @@ async def new_group(interaction: discord.Interaction, name: str):
     await interaction.response.send_message(embed=embed_status(status), ephemeral=True)
 
 
-@client.tree.command()
+@client.admin_group.command(description="Create a new course")
 @app_commands.describe(
     group="The group that owns this course",
     name="The name of the course",
@@ -113,14 +120,55 @@ async def channel_choices(
     ]
 
 
-@client.tree.command()
+@client.admin_group.command(description="Create a new module")
+@app_commands.describe(
+    name="The name of the course",
+    course="The course that owns this module. Can be left empty if in a default channel",
+    order="The ordering of the course inside its group",
+)
+@admin_perms
+async def new_module(
+    interaction: discord.Interaction,
+    name: str,
+    course: int | None = None,
+    order: int | None = None,
+):
+    deduced_course = db.deduce_course(interaction.channel_id)
+
+    if not deduced_course and not course:
+        await interaction.response.send_message(
+            embed=error_embed(
+                msg="You're not in the default channel of any course. Please specify the channel manually."
+            )
+        )
+        return
+
+    status = db.create_module(course or deduced_course["id"], name, order)
+    await interaction.response.send_message(embed=embed_status(status), ephemeral=True)
+
+
+@new_module.autocomplete("course")
+async def module_choices(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    return [
+        app_commands.Choice(
+            name=course["name"],
+            value=str(course["id"]),
+        )
+        for course in db.get_all("course")
+        if course["name"].lower().startswith(current.lower())
+    ]
+
+
+@client.tree.command(description="Mark a module as done")
 @app_commands.describe(module="The module to mark as done")
-async def mark_done(interaction: discord.Interaction, module: int):
+async def done(interaction: discord.Interaction, module: int):
     status = db.create_entry(interaction.user.id, module)
     await interaction.response.send_message(embed=embed_status(status), ephemeral=True)
 
 
-@mark_done.autocomplete("module")
+@done.autocomplete("module")
 async def module_choices(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
