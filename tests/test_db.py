@@ -9,7 +9,8 @@ TEST_CONFIG = Config(db=":memory:")
 
 def test_new_group():
     con = db.init_db(config=TEST_CONFIG)
-    db.create_group("Math", connection=con)
+    db.fix_connection(con)
+    db.create_group("Math")
 
     result = con.execute("SELECT * FROM courseGroup WHERE name = 'Math'").fetchone()
     assert result
@@ -18,9 +19,10 @@ def test_new_group():
 def test_new_course():
     con = db.init_db(config=TEST_CONFIG)
 
-    group_id = db.create_group("Math", connection=con).rowid
+    db.fix_connection(con)
+    group_id = db.create_group("Math").rowid
 
-    status = db.create_course(group_id, "Algebra 1", connection=con)
+    status = db.create_course(group_id, "Algebra 1")
 
     result = con.execute(
         "SELECT * FROM course WHERE name = 'Algebra 1' AND courseGroupId = ?",
@@ -33,9 +35,10 @@ def test_new_course():
 def test_new_course_invalid():
     con = db.init_db(config=TEST_CONFIG)
 
-    group_id = db.create_group("Math", connection=con).rowid
+    db.fix_connection(con)
+    group_id = db.create_group("Math").rowid
 
-    status = db.create_course(group_id + 1, "Algebra 1", connection=con)
+    status = db.create_course(group_id + 1, "Algebra 1")
 
     result = con.execute(
         "SELECT * FROM course WHERE name = 'Algebra 1' AND courseGroupId = ?",
@@ -48,10 +51,11 @@ def test_new_course_invalid():
 def test_new_module():
     con = db.init_db(config=TEST_CONFIG)
 
-    group_id = db.create_group("Math", connection=con).rowid
-    course_id = db.create_course(group_id, "Algebra 1", connection=con).rowid
+    db.fix_connection(con)
+    group_id = db.create_group("Math").rowid
+    course_id = db.create_course(group_id, "Algebra 1").rowid
 
-    status = db.create_module(course_id, "Lesson 1", connection=con)
+    status = db.create_module(course_id, "Lesson 1")
 
     result = con.execute(
         "SELECT * FROM module WHERE name = 'Lesson 1' AND courseGroupId = ? AND courseId = ?",
@@ -64,10 +68,11 @@ def test_new_module():
 def test_new_module_invalid():
     con = db.init_db(config=TEST_CONFIG)
 
-    group_id = db.create_group("Math", connection=con).rowid
-    course_id = db.create_course(group_id, "Algebra 1", connection=con).rowid
+    db.fix_connection(con)
+    group_id = db.create_group("Math").rowid
+    course_id = db.create_course(group_id, "Algebra 1").rowid
 
-    status = db.create_module(course_id + 1, "Lesson 1", connection=con)
+    status = db.create_module(course_id + 1, "Lesson 1")
 
     result = con.execute(
         "SELECT * FROM module WHERE name = 'Lesson 1' AND courseGroupId = ? AND courseId = ?",
@@ -80,11 +85,12 @@ def test_new_module_invalid():
 def test_new_entry():
     con = db.init_db(config=TEST_CONFIG)
 
-    group_id = db.create_group("Math", connection=con).rowid
-    course_id = db.create_course(group_id, "Algebra 1", connection=con).rowid
-    module_id = db.create_module(course_id, "Lesson 1", connection=con).rowid
+    db.fix_connection(con)
+    group_id = db.create_group("Math").rowid
+    course_id = db.create_course(group_id, "Algebra 1").rowid
+    module_id = db.create_module(course_id, "Lesson 1").rowid
 
-    status = db.create_entry(1, module_id, connection=con)
+    status = db.create_entry(1, module_id)
 
     result = con.execute(
         "SELECT * FROM checkEntry WHERE userId = 1 AND moduleId = ?",
@@ -97,11 +103,12 @@ def test_new_entry():
 def test_new_entry_invalid():
     con = db.init_db(config=TEST_CONFIG)
 
-    group_id = db.create_group("Math", connection=con).rowid
-    course_id = db.create_course(group_id, "Algebra 1", connection=con).rowid
-    module_id = db.create_module(course_id, "Lesson 1", connection=con).rowid
+    db.fix_connection(con)
+    group_id = db.create_group("Math").rowid
+    course_id = db.create_course(group_id, "Algebra 1").rowid
+    module_id = db.create_module(course_id, "Lesson 1").rowid
 
-    status = db.create_entry(1, module_id + 1, connection=con)
+    status = db.create_entry(1, module_id + 1)
 
     result = con.execute(
         "SELECT * FROM checkEntry WHERE userId = 1 AND moduleId = ?",
@@ -114,12 +121,13 @@ def test_new_entry_invalid():
 def test_new_entry_duplicate():
     con = db.init_db(config=TEST_CONFIG)
 
-    group_id = db.create_group("Math", connection=con).rowid
-    course_id = db.create_course(group_id, "Algebra 1", connection=con).rowid
-    module_id = db.create_module(course_id, "Lesson 1", connection=con).rowid
+    db.fix_connection(con)
+    group_id = db.create_group("Math").rowid
+    course_id = db.create_course(group_id, "Algebra 1").rowid
+    module_id = db.create_module(course_id, "Lesson 1").rowid
 
-    first_status = db.create_entry(1, module_id, connection=con)
-    second_status = db.create_entry(1, module_id, connection=con)
+    first_status = db.create_entry(1, module_id)
+    second_status = db.create_entry(1, module_id)
 
     result = con.execute(
         "SELECT * FROM checkEntry WHERE userId = 1 AND moduleId = ?",

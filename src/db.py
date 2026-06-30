@@ -7,6 +7,7 @@ from .config import Config
 from .utils import Status, StatusType, path_from_app
 
 _db_path = ""  # set by init_db
+_fixed_db_con = None
 
 
 def get_db(db_path: str | None = None) -> sqlite3.Connection:
@@ -14,10 +15,24 @@ def get_db(db_path: str | None = None) -> sqlite3.Connection:
 
     Note: Run init_db once before calling this function.
     """
+    if _fixed_db_con:
+        return _fixed_db_con
+
     con = sqlite3.Connection(db_path or _db_path)
     con.row_factory = sqlite3.Row
 
     return con
+
+
+def fix_connection(con: sqlite3.Connection | None) -> None:
+    """Set a fixed connection object to be used by all database functions.
+
+    Args:
+        con: The database connection, None to unset.
+    """
+    global _fixed_db_con
+
+    _fixed_db_con = con
 
 
 def init_db(config: Config) -> sqlite3.Connection:
@@ -41,24 +56,21 @@ def init_db(config: Config) -> sqlite3.Connection:
     return con
 
 
-def create_group(name: str, connection: sqlite3.Connection | None = None) -> Status:
+def create_group(name: str) -> Status:
     """Create a new group entity with given name.
 
     Args:
         name: The name of the group.
-        connection: A connection object to use instead of creating a new one. Used for testing.
 
     Returns: A Status object.
     """
-    con = connection or get_db()
+    con = get_db()
 
     cur = con.cursor()
     cur.execute("INSERT INTO courseGroup (name) VALUES (?)", (name,))
     last_id = cur.lastrowid
 
     con.commit()
-    if not connection:  # if the connection was made by this function, close it
-        con.close()
 
     return Status(msg=f"Group: **{name}** created.", rowid=last_id)
 
@@ -68,7 +80,6 @@ def create_course(
     name: str,
     channel_id: int | None = None,
     order: int | None = None,
-    connection: sqlite3.Connection | None = None,
 ) -> Status:
     """Create a new course entity under the given group.
 
@@ -77,11 +88,10 @@ def create_course(
         name: The name of the course.
         channel_id: Channel to associate the course with.
         order: Sort key, creation date will be used otherwise.
-        connection: A connection object to use instead of creating a new one. Used for testing.
 
     Returns: A Status object.
     """
-    con = connection or get_db()
+    con = get_db()
 
     cur = con.cursor()
 
@@ -110,8 +120,6 @@ def create_course(
     last_id = cur.lastrowid
 
     con.commit()
-    if not connection:  # if the connection was made by this function, close it
-        con.close()
 
     return Status(
         msg=f"Created course **{name}** under {group_exists['groupName']}.",
@@ -123,7 +131,6 @@ def create_module(
     course_id: int,
     name: str,
     order: int | None = None,
-    connection: sqlite3.Connection | None = None,
 ) -> Status:
     """Create a new module entity under the given course.
 
@@ -132,11 +139,10 @@ def create_module(
         name: The name of the course.
         channel_id: Channel to associate the course with.
         order: Sort key, creation date will be used otherwise.
-        connection: A connection object to use instead of creating a new one. Used for testing.
 
     Returns: A Status object.
     """
-    con = connection or get_db()
+    con = get_db()
 
     cur = con.cursor()
 
@@ -156,27 +162,22 @@ def create_module(
     last_id = cur.lastrowid
 
     con.commit()
-    if not connection:  # if the connection was made by this function, close it
-        con.close()
 
     return Status(
         msg=f"Module {name} created under {course_exists['name']}", rowid=last_id
     )
 
 
-def create_entry(
-    user_id: int, module_id: int, connection: sqlite3.Connection | None = None
-) -> Status:
+def create_entry(user_id: int, module_id: int) -> Status:
     """Create a new check entry entity.
 
     Args:
         user_id: The id of the user.
         module_id: The id of the module to check.
-        connection: A connection object to use instead of creating a new one. Used for testing.
 
     Returns: A Status object.
     """
-    con = connection or get_db()
+    con = get_db()
 
     cur = con.cursor()
 
@@ -206,36 +207,28 @@ def create_entry(
     last_id = cur.lastrowid
 
     con.commit()
-    if not connection:  # if the connection was made by this function, close it
-        con.close()
 
     return Status(msg=f"Checked **{module_exists['name']}**. Great job!", rowid=last_id)
 
 
-def get_all(
-    table: str, connection: sqlite3.Connection | None = None
-) -> list[sqlite3.Row]:
+def get_all(table: str) -> list[sqlite3.Row]:
     """Fetch all rows in the given table.
 
     Args:
         table: The table to query.
-        connection: A connection object to use instead of creating a new one. Used for testing.
     """
-    con = connection or get_db()
+    con = get_db()
 
     return con.execute(f"SELECT * FROM {table}").fetchall()
 
 
-def get_modules(
-    user_id, channel_id: int | None = None, connection: sqlite3.Connection | None = None
-) -> list[sqlite3.Row]:
+def get_modules(user_id, channel_id: int | None = None) -> list[sqlite3.Row]:
     """Fetch unchecked modules from the context of the current channel if possible.
 
     Args:
         channel_id: Channel to derive the course from. If no course is linked to it, all modules (in all courses) are returned instead.
-        connection: A connection object to use instead of creating a new one. Used for testing.
     """
-    con = connection or get_db()
+    con = get_db()
     cur = con.cursor()
     course_linked = con.execute(
         "SELECT id FROM course WHERE channelId = ?", (channel_id,)
