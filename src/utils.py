@@ -1,9 +1,9 @@
 """Helper classes, functions and values."""
 
+import functools
 from dataclasses import dataclass
 from enum import Enum
 from os import path
-from pydoc import doc
 
 import discord
 
@@ -55,3 +55,30 @@ def embed_status(status: Status):
         return error_embed(msg=status.msg, title=status.title)
 
     return info_embed(msg=status.msg, title=status.title)
+
+
+def require_roles(required_roles: list[str]):
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(interaction: discord.Interaction, *args, **kwargs):
+            user_roles: list[str] = [str(r).lower() for r in interaction.user.roles]
+
+            if not any(
+                [
+                    required_role.lower() in user_roles
+                    for required_role in required_roles
+                ]
+            ):
+                await interaction.response.send_message(
+                    embed=error_embed(
+                        "You don't have permission to use this command. Please contact an admin."
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            await func(interaction, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
