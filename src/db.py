@@ -1,5 +1,6 @@
 """The interface to all db operations."""
 
+import json
 import os
 import sqlite3
 
@@ -15,8 +16,17 @@ def get_db(db_path: str | None = None) -> sqlite3.Connection:
 
     Note: Run init_db once before calling this function.
     """
+    global _fixed_db_con
+
     if _fixed_db_con:
-        return _fixed_db_con
+        try:
+            cur = _fixed_db_con.cursor()
+            return _fixed_db_con
+        except sqlite3.ProgrammingError as _:
+            print(
+                f"Fixed database connection has been closed incorrectly! Assuming it was intentional and unsetting the fixed con."
+            )
+            _fixed_db_con = None
 
     con = sqlite3.Connection(db_path or _db_path)
     con.row_factory = sqlite3.Row
@@ -28,11 +38,18 @@ def fix_connection(con: sqlite3.Connection | None) -> None:
     """Set a fixed connection object to be used by all database functions.
 
     Args:
-        con: The database connection, None to unset.
+        con: The database connection, None to unset and close the connection.
     """
     global _fixed_db_con
 
-    _fixed_db_con = con
+    if con is None and _fixed_db_con is not None:
+        try:
+            _fixed_db_con.close()
+        except sqlite3.ProgrammingError as _:
+            pass  # already closed
+        _fixed_db_con = None
+    else:
+        _fixed_db_con = con
 
 
 def init_db(config: Config) -> sqlite3.Connection:
@@ -56,10 +73,11 @@ def init_db(config: Config) -> sqlite3.Connection:
     return con
 
 
-def create_group(name: str) -> Status:
+def create_group(guild_id: int, name: str) -> Status:
     """Create a new group entity with given name.
 
     Args:
+        guild_id: The guild that owns this group.
         name: The name of the group.
 
     Returns: A Status object.
@@ -67,7 +85,20 @@ def create_group(name: str) -> Status:
     con = get_db()
 
     cur = con.cursor()
-    cur.execute("INSERT INTO courseGroup (name) VALUES (?)", (name,))
+
+    group_exists = cur.execute(
+        "SELECT * FROM courseGroup WHERE guildId = ? AND name = ?", (guild_id, name)
+    ).fetchone()
+    if group_exists:
+        return Status(
+            type=StatusType.WARNING,
+            msg="Group already exists.",
+            rowid=group_exists["id"],
+        )
+
+    cur.execute(
+        "INSERT INTO courseGroup (guildId, name) VALUES (?, ?)", (guild_id, name)
+    )
     last_id = cur.lastrowid
 
     con.commit()
@@ -103,6 +134,16 @@ def create_course(
             StatusType.ERROR, msg="Such a group doesn't exist. Please create it first."
         )
 
+    course_exists = cur.execute(
+        "SELECT * FROM course WHERE courseGroupId = ? AND name = ?", (group_id, name)
+    ).fetchone()
+    if course_exists:
+        return Status(
+            type=StatusType.WARNING,
+            msg="Course already exists in the group.",
+            rowid=course_exists["id"],
+        )
+
     if channel_id:
         channel_in_use = cur.execute(
             "SELECT name as courseName FROM course WHERE channelId = ?", (channel_id,)
@@ -135,9 +176,8 @@ def create_module(
     """Create a new module entity under the given course.
 
     Args:
-        group_id: The id of the group that will own the course.
-        name: The name of the course.
-        channel_id: Channel to associate the course with.
+        course_id: The id of the course that will own the module.
+        name: The name of the module.
         order: Sort key, creation date will be used otherwise.
 
     Returns: A Status object.
@@ -153,6 +193,16 @@ def create_module(
     if not course_exists:
         return Status(
             StatusType.ERROR, msg="Such a course doesn't exist. Please create it first."
+        )
+
+    module_exists = cur.execute(
+        "SELECT * FROM module WHERE courseId = ? AND name = ?", (course_id, name)
+    ).fetchone()
+    if module_exists:
+        return Status(
+            type=StatusType.WARNING,
+            msg="Module already exists in the course.",
+            rowid=module_exists["id"],
         )
 
     cur.execute(
@@ -196,9 +246,7 @@ def create_entry(user_id: int, module_id: int) -> Status:
     ).fetchone()
 
     if entry_exists:
-        return Status(
-            StatusType.ERROR, msg="You have already checked this module before."
-        )
+        return Status(StatusType.WARNING, msg="You have already checked this module.")
 
     cur.execute(
         "INSERT INTO checkEntry (userId, moduleId) VALUES (?, ?)",
@@ -222,7 +270,8 @@ def get_all(table: str) -> list[sqlite3.Row]:
     return con.execute(f"SELECT * FROM {table}").fetchall()
 
 
-def get_modules(user_id, channel_id: int | None = None) -> list[sqlite3.Row]:
+# TODO: update this function to match the new UX
+def get_modules_state(user_id, channel_id: int | None = None) -> list[sqlite3.Row]:
     """Fetch unchecked modules from the context of the current channel if possible.
 
     Args:
@@ -239,7 +288,7 @@ def get_modules(user_id, channel_id: int | None = None) -> list[sqlite3.Row]:
             "SELECT id, name FROM module WHERE courseId = ? AND id not in (SELECT id FROM checkEntry)",
             (course_linked["id"],),
         ).fetchall()
-    else:
+    else:  # global
         modules = cur.execute(
             "SELECT module.id as id, module.name as name, course.name as courseName FROM module JOIN course ON module.courseId = course.id"
         ).fetchall()
@@ -283,3 +332,45 @@ def deduce_course(channel_id: int) -> sqlite3.Row:
     ).fetchone()
 
     return course_exists
+
+
+def from_json(guild_id: int, data: str) -> Status:
+    obj: dict[str, str] = json.loads(data)
+
+    for g in obj:
+        status = create_group(guild_id, g)
+        if status.type == StatusType.ERROR:
+            return status
+
+        g_id = status.rowid
+
+        if not isinstance(obj, dict):
+            continue
+
+        g_data = obj[g]
+        for course in g_data:
+            course_data = None
+            if isinstance(g_data, dict):
+                course_data = g_data[course]
+
+            status = create_course(
+                g_id, course, course_data.get("channel_id") if course_data else None
+            )
+            if status.type == StatusType.ERROR:
+                return status
+            course_id = status.rowid
+
+            if not course_data:
+                continue
+
+            modules = course_data.get("modules")
+            if not modules:
+                continue
+
+            for m in modules:
+                create_module(course_id, m)
+                if status.type == StatusType.ERROR:
+                    return status
+
+    status = Status(StatusType.INFO, msg="All done.")
+    return status

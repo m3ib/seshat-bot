@@ -4,6 +4,7 @@ import functools
 from dataclasses import dataclass
 from enum import Enum
 from os import path
+from typing import Callable
 
 import discord
 
@@ -13,7 +14,8 @@ ROOT_DIR = path.dirname(APP_DIR)
 
 class StatusType(Enum):
     INFO = 1
-    ERROR = 2
+    WARNING = 2
+    ERROR = 3
 
 
 @dataclass
@@ -57,11 +59,20 @@ def embed_status(status: Status):
     return info_embed(msg=status.msg, title=status.title)
 
 
-def require_roles(required_roles: list[str]):
+def require_roles(roles: list[str] | Callable) -> Callable:
     def decorator(func):
         @functools.wraps(func)
-        async def wrapper(interaction: discord.Interaction, *args, **kwargs):
+        async def wrapper(*args, **kwargs):
+            # find the interaction object
+            interaction = kwargs.get("interaction")
+            if interaction is None:
+                for a in args:
+                    if isinstance(a, discord.Interaction):
+                        interaction = a
+                        break
+
             user_roles: list[str] = [str(r).lower() for r in interaction.user.roles]
+            required_roles = roles() if callable(roles) else roles
 
             if not any(
                 [
@@ -77,7 +88,7 @@ def require_roles(required_roles: list[str]):
                 )
                 return
 
-            await func(interaction, *args, **kwargs)
+            await func(*args, **kwargs)
 
         return wrapper
 
