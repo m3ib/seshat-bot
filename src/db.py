@@ -361,9 +361,12 @@ def from_json(guild_id: int, data: str) -> Status:
 
     Args:
         guild_id: The guild that owns the group/s that might get created.
-        data: The json data to load, e.g. `{"Group1": {"Course 1": {"channel_id": 12, "modules": ["1", "2"]}, "Course 2": {}}, "Group 2": {}}`
+        data: The json data to load, e.g. `{"Group1": {"Course 1": {"channel_id": 12, "modules": {"Mod 5": {"order": 5}, "Mod 1": {}}}, "Course 2": {}}, "Group 2": {}}`
     """
-    obj: dict[str, str] = json.loads(data)
+    try:
+        obj: dict[str, str] = json.loads(data)
+    except json.decoder.JSONDecodeError as e:
+        return Status(ST.ERROR, msg=f"Failed to parse JSON string. Error: {e}")
 
     for g in obj:
         status = create_group(guild_id, g)
@@ -382,7 +385,10 @@ def from_json(guild_id: int, data: str) -> Status:
                 course_data = g_data[course]
 
             status = create_course(
-                g_id, course, course_data.get("channel_id") if course_data else None
+                g_id,
+                course,
+                course_data.get("channel_id") if course_data else None,
+                course_data.get("order") if course_data else None,
             )
             if status.type == ST.ERROR:
                 return status
@@ -396,7 +402,13 @@ def from_json(guild_id: int, data: str) -> Status:
                 continue
 
             for m in modules:
-                create_module(course_id, m)
+                module_data = None
+                if isinstance(modules, dict):
+                    module_data = modules[m]
+
+                create_module(
+                    course_id, m, module_data.get("order") if module_data else None
+                )
                 if status.type == ST.ERROR:
                     return status
 

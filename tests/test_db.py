@@ -256,26 +256,27 @@ class TestFromJson:
         assert c_count == 3
         assert correct_course
 
-    def test_course_channel(self):
+    def test_course_attributes(self):
         con = db.init_db(config=TEST_CONFIG)
 
         db.fix_connection(con)
         status = db.from_json(
-            1, '{"Group 1": {"Course 1": {"channel_id": 12}}, "Group 2": []}'
+            1,
+            '{"Group 1": {"Course 1": {"channel_id": 12, "order": 2}}, "Group 2": []}',
         )
 
         g_count = con.execute("SELECT COUNT(*) as c FROM courseGroup").fetchone()["c"]
         correct_course = con.execute(
-            "SELECT * FROM course WHERE name = ? AND courseGroupId = ? AND channelId = ?",
-            ("Course 1", 1, 12),
-        ).fetchall()
+            "SELECT * FROM course WHERE name = ? AND courseGroupId = ? AND channelId = ? AND ord = ?",
+            ("Course 1", 1, 12, 2),
+        ).fetchone()
         db.fix_connection(None)
 
         assert status.type == StatusType.INFO
         assert g_count == 2
         assert correct_course
 
-    def test_modules(self):
+    def test_module_list(self):
         con = db.init_db(config=TEST_CONFIG)
 
         db.fix_connection(con)
@@ -289,6 +290,26 @@ class TestFromJson:
             "SELECT * FROM module WHERE name = ? AND courseId = ?",
             ("Mod2", 1),
         ).fetchall()
+        db.fix_connection(None)
+
+        assert status.type == StatusType.INFO
+        assert m_count == 3
+        assert correct_module
+
+    def test_module_attributes(self):
+        con = db.init_db(config=TEST_CONFIG)
+
+        db.fix_connection(con)
+        status = db.from_json(
+            1,
+            '{"Group 1": {"Course 1": {"channel_id": 12, "modules": {"Mod1": {}, "Mod2": {"order": 5}, "Mod3": {}}}}, "Group 2": []}',
+        )
+
+        m_count = con.execute("SELECT COUNT(*) as c FROM module").fetchone()["c"]
+        correct_module = con.execute(
+            "SELECT * FROM module WHERE name = ? AND courseId = ? AND ord = ?",
+            ("Mod2", 1, 5),
+        ).fetchone()
         db.fix_connection(None)
 
         assert status.type == StatusType.INFO
@@ -318,3 +339,19 @@ class TestFromJson:
         assert status.type == StatusType.INFO
         assert m_count == 3
         assert correct_module
+
+    def test_invalid_json(self):
+        con = db.init_db(config=TEST_CONFIG)
+
+        db.fix_connection(con)
+
+        status = db.from_json(
+            1,
+            '{"Group 1: {"Course 1": {"modules": ["Mod1", "Mod2", "Mod3"]}}, "Group 2": []}',  # unpaired double-quote
+        )
+
+        g_count = con.execute("SELECT COUNT(*) as c FROM courseGroup").fetchone()["c"]
+        db.fix_connection(None)
+
+        assert status.type == StatusType.ERROR
+        assert g_count == 0
