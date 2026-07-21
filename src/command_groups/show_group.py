@@ -6,7 +6,7 @@ from discord import app_commands as apc
 
 from src import db
 from src.config import Config
-from src.utils import embed_status, error_embed
+from src.utils import embed_status
 
 
 class ShowGroup(apc.Group):

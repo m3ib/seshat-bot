@@ -5,8 +5,9 @@ import os
 import sqlite3
 
 from .config import Config
-from .utils import Status, path_from_app
-from .utils import StatusType as ST
+from .utils import ExitStatus as ES
+from .utils import ExitStatusType as EST
+from .utils import path_from_app
 
 _db_path = ""  # set by init_db
 _fixed_db_con = None
@@ -74,14 +75,14 @@ def init_db(config: Config) -> sqlite3.Connection:
     return con
 
 
-def create_group(guild_id: int, name: str) -> Status:
+def create_group(guild_id: int, name: str) -> ES:
     """Create a new group entity with given name.
 
     Args:
         guild_id: The guild that owns this group.
         name: The name of the group.
 
-    Returns: A Status object.
+    Returns: An ExitStatus object.
     """
     con = get_db()
 
@@ -91,8 +92,8 @@ def create_group(guild_id: int, name: str) -> Status:
         "SELECT * FROM courseGroup WHERE guildId = ? AND name = ?", (guild_id, name)
     ).fetchone()
     if group_exists:
-        return Status(
-            type=ST.WARNING,
+        return ES(
+            type=EST.WARNING,
             msg="Group already exists.",
             rowid=group_exists["id"],
         )
@@ -104,7 +105,7 @@ def create_group(guild_id: int, name: str) -> Status:
 
     con.commit()
 
-    return Status(msg=f"Group: **{name}** created.", rowid=last_id)
+    return ES(msg=f"Group: **{name}** created.", rowid=last_id)
 
 
 def create_course(
@@ -112,7 +113,7 @@ def create_course(
     name: str,
     channel_id: int | None = None,
     order: int | None = None,
-) -> Status:
+) -> ES:
     """Create a new course entity under the given group.
 
     Args:
@@ -121,7 +122,7 @@ def create_course(
         channel_id: Channel to associate the course with.
         order: Sort key, creation date will be used otherwise.
 
-    Returns: A Status object.
+    Returns: An ExitStatus object.
     """
     con = get_db()
 
@@ -131,16 +132,14 @@ def create_course(
         "SELECT name as groupName FROM courseGroup WHERE id = ?", (group_id,)
     ).fetchone()
     if not group_exists:
-        return Status(
-            ST.ERROR, msg="Such a group doesn't exist. Please create it first."
-        )
+        return ES(EST.ERROR, msg="Such a group doesn't exist. Please create it first.")
 
     course_exists = cur.execute(
         "SELECT * FROM course WHERE courseGroupId = ? AND name = ?", (group_id, name)
     ).fetchone()
     if course_exists:
-        return Status(
-            type=ST.WARNING,
+        return ES(
+            type=EST.WARNING,
             msg="Course already exists in the group.",
             rowid=course_exists["id"],
         )
@@ -150,8 +149,8 @@ def create_course(
             "SELECT name as courseName FROM course WHERE channelId = ?", (channel_id,)
         ).fetchone()
         if channel_in_use:
-            return Status(
-                ST.ERROR,
+            return ES(
+                EST.ERROR,
                 msg=f"This channel is already in use by **{channel_in_use['courseName']}**.",
             )
 
@@ -163,7 +162,7 @@ def create_course(
 
     con.commit()
 
-    return Status(
+    return ES(
         msg=f"Created course **{name}** under {group_exists['groupName']}.",
         rowid=last_id,
     )
@@ -173,7 +172,7 @@ def create_module(
     course_id: int,
     name: str,
     order: int | None = None,
-) -> Status:
+) -> ES:
     """Create a new module entity under the given course.
 
     Args:
@@ -181,7 +180,7 @@ def create_module(
         name: The name of the module.
         order: Sort key, creation date will be used otherwise.
 
-    Returns: A Status object.
+    Returns: An ExitStatus object.
     """
     con = get_db()
 
@@ -192,16 +191,14 @@ def create_module(
     ).fetchone()
 
     if not course_exists:
-        return Status(
-            ST.ERROR, msg="Such a course doesn't exist. Please create it first."
-        )
+        return ES(EST.ERROR, msg="Such a course doesn't exist. Please create it first.")
 
     module_exists = cur.execute(
         "SELECT * FROM module WHERE courseId = ? AND name = ?", (course_id, name)
     ).fetchone()
     if module_exists:
-        return Status(
-            type=ST.WARNING,
+        return ES(
+            type=EST.WARNING,
             msg="Module already exists in the course.",
             rowid=module_exists["id"],
         )
@@ -214,19 +211,17 @@ def create_module(
 
     con.commit()
 
-    return Status(
-        msg=f"Module {name} created under {course_exists['name']}", rowid=last_id
-    )
+    return ES(msg=f"Module {name} created under {course_exists['name']}", rowid=last_id)
 
 
-def create_entry(user_id: int, module_id: int) -> Status:
+def create_entry(user_id: int, module_id: int) -> ES:
     """Create a new check entry entity.
 
     Args:
         user_id: The id of the user.
         module_id: The id of the module to check.
 
-    Returns: A Status object.
+    Returns: An ExitStatus object.
     """
     con = get_db()
 
@@ -237,9 +232,7 @@ def create_entry(user_id: int, module_id: int) -> Status:
     ).fetchone()
 
     if not module_exists:
-        return Status(
-            ST.ERROR, msg="Such a module doesn't exist. Please create it first."
-        )
+        return ES(EST.ERROR, msg="Such a module doesn't exist. Please create it first.")
 
     entry_exists = cur.execute(
         "SELECT * FROM checkEntry WHERE userId = ? AND moduleId = ?",
@@ -247,7 +240,7 @@ def create_entry(user_id: int, module_id: int) -> Status:
     ).fetchone()
 
     if entry_exists:
-        return Status(ST.WARNING, msg="You have already checked this module.")
+        return ES(EST.WARNING, msg="You have already checked this module.")
 
     cur.execute(
         "INSERT INTO checkEntry (userId, moduleId) VALUES (?, ?)",
@@ -257,17 +250,17 @@ def create_entry(user_id: int, module_id: int) -> Status:
 
     con.commit()
 
-    return Status(msg=f"Checked **{module_exists['name']}**. Great job!", rowid=last_id)
+    return ES(msg=f"Checked **{module_exists['name']}**. Great job!", rowid=last_id)
 
 
-def delete_entry(user_id: int, module_id: int) -> Status:
+def delete_entry(user_id: int, module_id: int) -> ES:
     """Delete a check entry.
 
     Args:
         user_id: The id of the user.
         module_id: The id of the module.
 
-    Returns: A Status object.
+    Returns: An ExitStatus object.
     """
     con = get_db()
 
@@ -282,7 +275,7 @@ def delete_entry(user_id: int, module_id: int) -> Status:
     ).fetchone()
 
     if not entry_exists:
-        return Status(ST.WARNING, msg="It's already not checked.")
+        return ES(EST.WARNING, msg="It's already not checked.")
 
     cur.execute(
         "DELETE FROM checkEntry WHERE userId = ? AND moduleId = ?",
@@ -291,7 +284,7 @@ def delete_entry(user_id: int, module_id: int) -> Status:
 
     con.commit()
 
-    return Status(msg=f"Unchecked module **{module['name']}**.")
+    return ES(msg=f"Unchecked module **{module['name']}**.")
 
 
 def get_all(table: str) -> list[sqlite3.Row]:
@@ -356,7 +349,7 @@ def deduce_course(channel_id: int) -> sqlite3.Row:
     return course_exists
 
 
-def from_json(guild_id: int, data: str) -> Status:
+def from_json(guild_id: int, data: str) -> ES:
     """Update the database to match or contain the given data.
 
     Args:
@@ -366,11 +359,11 @@ def from_json(guild_id: int, data: str) -> Status:
     try:
         obj: dict[str, str] = json.loads(data)
     except json.decoder.JSONDecodeError as e:
-        return Status(ST.ERROR, msg=f"Failed to parse JSON string. Error: {e}")
+        return ES(EST.ERROR, msg=f"Failed to parse JSON string. Error: {e}")
 
     for g in obj:
         status = create_group(guild_id, g)
-        if status.type == ST.ERROR:
+        if status.type == EST.ERROR:
             return status
 
         g_id = status.rowid
@@ -390,7 +383,7 @@ def from_json(guild_id: int, data: str) -> Status:
                 course_data.get("channel_id") if course_data else None,
                 course_data.get("order") if course_data else None,
             )
-            if status.type == ST.ERROR:
+            if status.type == EST.ERROR:
                 return status
             course_id = status.rowid
 
@@ -409,23 +402,23 @@ def from_json(guild_id: int, data: str) -> Status:
                 create_module(
                     course_id, m, module_data.get("order") if module_data else None
                 )
-                if status.type == ST.ERROR:
+                if status.type == EST.ERROR:
                     return status
 
-    status = Status(ST.INFO, msg="All done.")
+    status = ES(EST.INFO, msg="All done.")
     return status
 
 
-def course_progress(user_id: int, course_id: int) -> Status:
+def course_progress(user_id: int, course_id: int) -> ES:
     """List all modules in a course and their status for a user.
 
-    Returns: a Status object"""
+    Returns: an ExitStatus object"""
     con = get_db()
     course = con.execute(
         "SELECT name FROM course WHERE id = ?", (course_id,)
     ).fetchone()
     if not course:
-        return Status(ST.ERROR, msg="Such a course doesn't exist.")
+        return ES(EST.ERROR, msg="Such a course doesn't exist.")
 
     course_modules = con.execute(
         "SELECT * FROM module WHERE courseId = ? ORDER BY ord, creationDate",
@@ -442,4 +435,4 @@ def course_progress(user_id: int, course_id: int) -> Status:
         module_status += f"### {'✅' if is_checked else '🟩'} {module['name']}\n"
     module_status = module_status.strip()
 
-    return Status(ST.INFO, msg=module_status, title=course["name"])
+    return ES(EST.INFO, msg=module_status, title=course["name"])

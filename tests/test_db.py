@@ -2,7 +2,7 @@ import pytest
 
 from src import db as db
 from src.config import Config
-from src.utils import StatusType
+from src.utils import ExitStatusType as EST
 
 TEST_CONFIG = Config(db=":memory:")
 
@@ -11,27 +11,27 @@ class TestCreateGroup:
     def test_new(self):
         con = db.init_db(config=TEST_CONFIG)
         db.fix_connection(con)
-        status = db.create_group(1, "Math")
+        exit_status = db.create_group(1, "Math")
 
         result = con.execute("SELECT * FROM courseGroup WHERE name = 'Math'").fetchone()
         db.fix_connection(None)
 
-        assert status.type == StatusType.INFO
+        assert exit_status.type == EST.INFO
         assert result
 
     def test_duplicate(self):
         con = db.init_db(config=TEST_CONFIG)
         db.fix_connection(con)
-        first_status = db.create_group(1, "Math")
-        second_status = db.create_group(1, "Math")
+        exit_1 = db.create_group(1, "Math")
+        exit_2 = db.create_group(1, "Math")
 
         count = con.execute(
             "SELECT COUNT(*) as c FROM courseGroup WHERE name = 'Math'"
         ).fetchone()["c"]
         db.fix_connection(None)
 
-        assert first_status.type == StatusType.INFO
-        assert second_status.type == StatusType.WARNING
+        assert exit_1.type == EST.INFO
+        assert exit_2.type == EST.WARNING
         assert count == 1
 
 
@@ -50,7 +50,7 @@ class TestCreateCourse:
         ).fetchone()
         db.fix_connection(None)
 
-        assert status.type == StatusType.INFO
+        assert status.type == EST.INFO
         assert result
 
     def test_duplicate(self):
@@ -59,8 +59,8 @@ class TestCreateCourse:
         db.fix_connection(con)
         group_id = db.create_group(1, "Math").rowid
 
-        first_status = db.create_course(group_id, "Algebra 1")
-        second_status = db.create_course(group_id, "Algebra 1")
+        exit_1 = db.create_course(group_id, "Algebra 1")
+        exit_2 = db.create_course(group_id, "Algebra 1")
 
         count = con.execute(
             "SELECT COUNT(*) as c FROM course WHERE name = 'Algebra 1' AND courseGroupId = ?",
@@ -68,8 +68,8 @@ class TestCreateCourse:
         ).fetchone()["c"]
         db.fix_connection(None)
 
-        assert first_status.type == StatusType.INFO
-        assert second_status.type == StatusType.WARNING
+        assert exit_1.type == EST.INFO
+        assert exit_2.type == EST.WARNING
         assert count == 1
 
     def test_invalid(self):
@@ -86,7 +86,7 @@ class TestCreateCourse:
         ).fetchone()
         db.fix_connection(None)
 
-        assert status.type == StatusType.ERROR
+        assert status.type == EST.ERROR
         assert not result
 
 
@@ -106,7 +106,7 @@ class TestModule:
         ).fetchone()
         db.fix_connection(None)
 
-        assert status.type == StatusType.INFO
+        assert status.type == EST.INFO
         assert result
 
     def test_duplicate(self):
@@ -116,8 +116,8 @@ class TestModule:
         group_id = db.create_group(1, "Math").rowid
         course_id = db.create_course(group_id, "Algebra 1").rowid
 
-        first_status = db.create_module(course_id, "Lesson 1")
-        second_status = db.create_module(course_id, "Lesson 1")
+        exit_1 = db.create_module(course_id, "Lesson 1")
+        exit_2 = db.create_module(course_id, "Lesson 1")
 
         count = con.execute(
             "SELECT COUNT(*) as c FROM module WHERE name = 'Lesson 1' AND courseGroupId = ? AND courseId = ?",
@@ -125,8 +125,8 @@ class TestModule:
         ).fetchone()["c"]
         db.fix_connection(None)
 
-        assert first_status.type == StatusType.INFO
-        assert second_status.type == StatusType.WARNING
+        assert exit_1.type == EST.INFO
+        assert exit_2.type == EST.WARNING
         assert count == 1
 
     def test_invalid(self):
@@ -144,7 +144,7 @@ class TestModule:
         ).fetchone()
         db.fix_connection(None)
 
-        assert status.type == StatusType.ERROR
+        assert status.type == EST.ERROR
         assert not result
 
 
@@ -165,7 +165,7 @@ class TestCreateEntry:
         ).fetchone()
         db.fix_connection(None)
 
-        assert status.type == StatusType.INFO
+        assert status.type == EST.INFO
         assert result
 
     def test_invalid(self):
@@ -184,7 +184,7 @@ class TestCreateEntry:
         ).fetchone()
         db.fix_connection(None)
 
-        assert status.type == StatusType.ERROR
+        assert status.type == EST.ERROR
         assert not result
 
     def test_duplicate(self):
@@ -195,8 +195,8 @@ class TestCreateEntry:
         course_id = db.create_course(group_id, "Algebra 1").rowid
         module_id = db.create_module(course_id, "Lesson 1").rowid
 
-        first_status = db.create_entry(1, module_id)
-        second_status = db.create_entry(1, module_id)
+        exit_1 = db.create_entry(1, module_id)
+        exit_2 = db.create_entry(1, module_id)
 
         result = con.execute(
             "SELECT * FROM checkEntry WHERE userId = 1 AND moduleId = ?",
@@ -204,8 +204,8 @@ class TestCreateEntry:
         ).fetchall()
         db.fix_connection(None)
 
-        assert first_status.type == StatusType.INFO
-        assert second_status.type == StatusType.WARNING
+        assert exit_1.type == EST.INFO
+        assert exit_2.type == EST.WARNING
         assert len(result) == 1
 
 
@@ -232,7 +232,7 @@ class TestFromJson:
         ).fetchall()
         db.fix_connection(None)
 
-        assert status.type == StatusType.INFO
+        assert status.type == EST.INFO
         assert g_count == 3
         assert correct_group
 
@@ -251,7 +251,7 @@ class TestFromJson:
         ).fetchall()
         db.fix_connection(None)
 
-        assert status.type == StatusType.INFO
+        assert status.type == EST.INFO
         assert g_count == 2
         assert c_count == 3
         assert correct_course
@@ -272,7 +272,7 @@ class TestFromJson:
         ).fetchone()
         db.fix_connection(None)
 
-        assert status.type == StatusType.INFO
+        assert status.type == EST.INFO
         assert g_count == 2
         assert correct_course
 
@@ -292,7 +292,7 @@ class TestFromJson:
         ).fetchall()
         db.fix_connection(None)
 
-        assert status.type == StatusType.INFO
+        assert status.type == EST.INFO
         assert m_count == 3
         assert correct_module
 
@@ -312,7 +312,7 @@ class TestFromJson:
         ).fetchone()
         db.fix_connection(None)
 
-        assert status.type == StatusType.INFO
+        assert status.type == EST.INFO
         assert m_count == 3
         assert correct_module
 
@@ -336,7 +336,7 @@ class TestFromJson:
         ).fetchall()
         db.fix_connection(None)
 
-        assert status.type == StatusType.INFO
+        assert status.type == EST.INFO
         assert m_count == 3
         assert correct_module
 
@@ -353,5 +353,5 @@ class TestFromJson:
         g_count = con.execute("SELECT COUNT(*) as c FROM courseGroup").fetchone()["c"]
         db.fix_connection(None)
 
-        assert status.type == StatusType.ERROR
+        assert status.type == EST.ERROR
         assert g_count == 0

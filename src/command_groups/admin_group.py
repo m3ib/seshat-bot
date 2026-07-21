@@ -3,7 +3,9 @@ from discord import app_commands as apc
 
 from src import db
 from src.config import Config
-from src.utils import embed_status, error_embed, require_roles
+from src.utils import ExitStatus as ST
+from src.utils import ExitStatusType as EST
+from src.utils import embed_status, require_roles
 
 
 class AdminGroup(apc.Group):

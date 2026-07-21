@@ -12,17 +12,27 @@ APP_DIR = path.dirname(path.abspath(__file__))
 ROOT_DIR = path.dirname(APP_DIR)
 
 
-class StatusType(Enum):
-    INFO = 1
-    WARNING = 2
-    ERROR = 3
+class ExitStatusType(Enum):
+    """Represent the type of an ExitStatus of an operation."""
+
+    INFO = "Info"
+    WARNING = "Warning"
+    ERROR = "Error"
+
+    @property
+    def color(self):
+        return {
+            ExitStatusType.INFO: discord.Color.blue(),
+            ExitStatusType.WARNING: discord.Color.orange(),
+            ExitStatusType.ERROR: discord.Color.red(),
+        }[self]
 
 
 @dataclass
-class Status:
-    """Represent the exit status of a db operation."""
+class ExitStatus:
+    """Represent the exit status of an operation."""
 
-    type: StatusType = StatusType.INFO
+    type: ExitStatusType = ExitStatusType.INFO
     title: str = ""
     msg: str = ""
     rowid: int | None = None
@@ -38,25 +48,12 @@ def path_from_app(p: str):
     return path.join(APP_DIR, p)
 
 
-def info_embed(msg: str, title: str = "") -> discord.Embed:
-    """Create an embed to show an informational message"""
+def embed_status(status: ExitStatus):
     return discord.Embed(
-        title=title or "Info", description=msg, color=discord.Color.blue()
+        title=status.title or status.type.value,
+        description=status.msg,
+        color=status.type.color,
     )
-
-
-def error_embed(msg: str, title: str = "") -> discord.Embed:
-    """Create an embed to show an error message"""
-    return discord.Embed(
-        title=title or "Error", description=msg, color=discord.Color.red()
-    )
-
-
-def embed_status(status: Status):
-    if status.type == StatusType.ERROR:
-        return error_embed(msg=status.msg, title=status.title)
-
-    return info_embed(msg=status.msg, title=status.title)
 
 
 def require_roles(roles: list[str] | Callable) -> Callable:
@@ -81,8 +78,11 @@ def require_roles(roles: list[str] | Callable) -> Callable:
                 ]
             ):
                 await interaction.response.send_message(
-                    embed=error_embed(
-                        "You don't have permission to use this command. Please contact an admin."
+                    embed=embed_status(
+                        ExitStatus(
+                            type=ExitStatusType.ERROR,
+                            msg="You don't have permission to use this command. Please contact an admin.",
+                        )
                     ),
                     ephemeral=True,
                 )
